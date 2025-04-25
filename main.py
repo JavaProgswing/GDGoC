@@ -65,7 +65,7 @@ def get_tokens_from_supabase(user_id: str):
 
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID")
 GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET")
-REDIRECT_URI = "https://speakersessionbooking.vercel.app/callback"
+REDIRECT_URI = "https://cdqntnxhyppwhnkbsmxu.supabase.co/auth/v1/callback"
 
 
 async def exchange_code_for_tokens(code: str) -> dict:
