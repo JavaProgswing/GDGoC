@@ -1,0 +1,5 @@
+aiohttp
+fastapi==0.115.3
+slowapi==0.1.9
+supabase==2.10.0
+pydantic[email]
