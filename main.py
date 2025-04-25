@@ -69,24 +69,6 @@ GOOGLE_OAUTH_REDIRECT_URI = "https://cdqntnxhyppwhnkbsmxu.supabase.co/auth/v1/ca
 REDIRECT_URI = "https://speakersessionbooking.vercel.app/callback"
 
 
-async def exchange_code_for_tokens(code: str) -> dict:
-    async with httpx.AsyncClient() as client:
-        response = await client.post(
-            "https://oauth2.googleapis.com/token",
-            data={
-                "code": code,
-                "client_id": GOOGLE_CLIENT_ID,
-                "client_secret": GOOGLE_CLIENT_SECRET,
-                "redirect_uri": GOOGLE_OAUTH_REDIRECT_URI,
-                "grant_type": "authorization_code",
-            },
-            headers={"Content-Type": "application/x-www-form-urlencoded"},
-        )
-        print("Response from Google:", response.text, flush=True)
-        response.raise_for_status()
-        return response.json()
-
-
 @app.post("/users/signup")
 def signup(user: UserSignup):
     credentials = {
@@ -105,13 +87,38 @@ def signup(user: UserSignup):
     }
 
 
+async def exchange_code_for_tokens(code: str) -> dict:
+    """
+    Exchange the authorization code for access and refresh tokens.
+    """
+    async with httpx.AsyncClient() as client:
+        data = {
+            "code": code,  # Authorization code you received
+            "client_id": GOOGLE_CLIENT_ID,  # Your Google Client ID
+            "client_secret": GOOGLE_CLIENT_SECRET,  # Your Google Client Secret
+            "redirect_uri": REDIRECT_URI,  # Your Redirect URI (must match the one used in the auth request)
+            "grant_type": "authorization_code",  # This tells Google we are using an authorization code
+        }
+        print(f"Data for token exchange: {data}", flush=True)
+        response = await client.post(
+            "https://oauth2.googleapis.com/token",
+            data=data,
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
+
+        # Raise an exception if the response code is not 200 (OK)
+        response.raise_for_status()
+
+        # Return the token response as a dictionary
+        return response.json()
+
+
 @app.get("/callback")
 async def oauth_callback(request: Request):
     code = request.query_params.get("code")
     if not code:
         raise HTTPException(status_code=400, detail="Missing authorization code")
 
-    google_tokens = await exchange_code_for_tokens(code)
-    print(google_tokens, flush=True)
-    # save_tokens_to_supabase(user_id, google_tokens)
+    tokens = await exchange_code_for_tokens(code)
+    print(f"Tokens received: {tokens}")
     return {"status": "ok"}
