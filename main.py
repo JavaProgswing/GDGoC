@@ -7,6 +7,8 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 import os
 from fastapi.security import HTTPBearer
+from datetime import datetime, timedelta
+import httpx
 
 app = FastAPI(
     title="Booking Platform API",
@@ -35,25 +37,79 @@ class UserSignup(BaseModel):
     password: str
 
 
+def save_tokens_to_supabase(user_id: str, tokens: dict):
+    expires_at = datetime.utcnow() + timedelta(seconds=tokens["expires_in"])
+    data = {
+        "user_id": user_id,
+        "provider": "google",
+        "access_token": tokens["access_token"],
+        "refresh_token": tokens.get("refresh_token"),
+        "expires_at": expires_at.isoformat(),
+    }
+
+    supabase.table("oauth_tokens").upsert(data).execute()
+
+
+def get_tokens_from_supabase(user_id: str):
+    result = (
+        supabase.table("oauth_tokens")
+        .select("*")
+        .eq("user_id", user_id)
+        .single()
+        .execute()
+    )
+    if result.data:
+        return result.data
+    return None
+
+
+GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID")
+GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET")
+REDIRECT_URI = "https://speakersessionbooking.vercel.app/callback"
+
+
+async def exchange_code_for_tokens(code: str) -> dict:
+    async with httpx.AsyncClient() as client:
+        response = await client.post(
+            "https://oauth2.googleapis.com/token",
+            data={
+                "code": code,
+                "client_id": GOOGLE_CLIENT_ID,
+                "client_secret": GOOGLE_CLIENT_SECRET,
+                "redirect_uri": REDIRECT_URI,
+                "grant_type": "authorization_code",
+            },
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
+        response.raise_for_status()
+        return response.json()
+
+
 @app.post("/users/signup")
 def signup(user: UserSignup):
-    result = supabase.auth.sign_up({"email": user.email, "password": user.password})
-    user_id = result.user.id
-    supabase.table("profiles").insert(
-        {
-            "id": user_id,
-            "email": user.email,
-            "user_type": "user",
-            "is_verified": False,
-        }
-    ).execute()
-    supabase.auth.sign_in_with_oauth()
-    return {"message": "Signup successful. Please verify your email."}
+    credentials = {
+        "provider": "google",
+        "options": {
+            "redirect_to": "https://speakersessionbooking.vercel.app/callback",
+            "scopes": "profile email https://www.googleapis.com/auth/calendar",
+            "query_params": {"prompt": "consent"},
+        },
+    }
+    result = supabase.auth.sign_in_with_oauth(credentials)
+
+    return {
+        "url": result.url,
+        "provider": result.provider,
+    }
+
 
 @app.get("/callback")
-def callback(request: Request):
+async def oauth_callback(request: Request):
     code = request.query_params.get("code")
     if not code:
         raise HTTPException(status_code=400, detail="Missing authorization code")
-    print("Authorization code received:", code, flush=True)
-    return {"message": "OAuth callback received", "code": code}
+
+    google_tokens = await exchange_code_for_tokens(code)
+    print(google_tokens, flush=True)
+    # save_tokens_to_supabase(user_id, google_tokens)
+    return {"status": "ok"}
