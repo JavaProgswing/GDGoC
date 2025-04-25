@@ -65,6 +65,7 @@ def get_tokens_from_supabase(user_id: str):
 
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID")
 GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET")
+GOOGLE_OAUTH_REDIRECT_URI = "https://cdqntnxhyppwhnkbsmxu.supabase.co/auth/v1/callback"
 REDIRECT_URI = "https://speakersessionbooking.vercel.app/callback"
 
 
@@ -91,7 +92,7 @@ def signup(user: UserSignup):
     credentials = {
         "provider": "google",
         "options": {
-            "redirect_to": "https://speakersessionbooking.vercel.app/callback",
+            "redirect_to": REDIRECT_URI,
             "scopes": "profile email https://www.googleapis.com/auth/calendar",
             "query_params": {"prompt": "consent"},
         },
