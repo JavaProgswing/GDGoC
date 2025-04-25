@@ -81,6 +81,7 @@ async def exchange_code_for_tokens(code: str) -> dict:
             },
             headers={"Content-Type": "application/x-www-form-urlencoded"},
         )
+        print("Response from Google:", response.text, flush=True)
         response.raise_for_status()
         return response.json()
 
