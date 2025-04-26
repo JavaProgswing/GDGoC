@@ -236,7 +236,7 @@ async def resend_otp(email: EmailStr):
         .execute()
     )
 
-    if not user.data:
+    if not user:
         raise HTTPException(status_code=400, detail="Email not registered")
     if user.data["is_verified"]:
         raise HTTPException(status_code=400, detail="Email already verified")
@@ -279,7 +279,7 @@ async def verify_otp(email: str, otp: str):
         .execute()
     )
 
-    if not user.data:
+    if not user:
         raise HTTPException(status_code=400, detail="Email not registered")
 
     if user.data["is_verified"]:
@@ -324,13 +324,12 @@ async def login(email: str, password: str):
         .execute()
     )
 
-    if not result.data:
+    if not result:
         raise HTTPException(status_code=400, detail="Email not registered")
 
+    user = result.data
     if not user["is_verified"]:
         raise HTTPException(status_code=403, detail="User not verified")
-
-    user = result.data
 
     if not bcrypt.verify(password, user["password_hash"]):
         raise HTTPException(status_code=401, detail="Incorrect password")
@@ -352,7 +351,7 @@ def signup(user: UserSignup):
         .execute()
     )
 
-    if existing_user.data:
+    if existing_user:
         raise HTTPException(status_code=400, detail="Email already registered")
 
     password_hash = bcrypt.hash(user.password)
@@ -385,7 +384,7 @@ def book_session(data: SessionBooking, user=Depends(verify_user_token)):
             .maybe_single()
             .execute()
         )
-        if not speaker_profile.data:
+        if not speaker_profile:
             raise HTTPException(status_code=404, detail="Speaker not found")
 
         speaker_token = get_tokens_from_supabase(data.speaker_id)
@@ -436,14 +435,14 @@ def speakers_signup(user: UserSignup):
         .execute()
     )
 
-    if existing_user.data:
+    if existing_user:
         raise HTTPException(status_code=400, detail="Email already registered")
 
     password_hash = bcrypt.hash(user.password)
 
     user_insert = (
         supabase.table("users")
-        .upsert(
+        .insert(
             {
                 "email": user.email.lower(),
                 "password_hash": password_hash,
