@@ -397,13 +397,7 @@ async def verify_otp(data: OTPVerification):
     supabase.table("users").update({"is_verified": True}).eq(
         "id", user.data["id"]
     ).execute()
-    if user.data["type"] == "user":
-        return {"status": "OTP verified"}
-    else:
-        return {
-            "status": "OTP verified, login with google oauth and setup the speaker profile on /speakers/profile",
-            "redirect_url": get_google_auth_url(),
-        }
+    return {"status": "OTP verified"}
 
 
 @app.post(
@@ -643,7 +637,7 @@ def speakers_signup(user: UserSignup):
     supabase.table("otps").insert({"user_id": user_id, "otp": otp}).execute()
     send_otp_email(user.email, otp)
 
-    return {"status": "OTP sent"}
+    return {"status": "OTP sent", "redirect_url": get_google_auth_url()}
 
 
 @app.get(
