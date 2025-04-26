@@ -447,7 +447,7 @@ def book_session(data: SessionBooking, user=Depends(verify_user_token)):
 
     supabase.table("sessions").insert(
         {
-            "speaker_id": data.speaker_id,
+            "speaker_id": speaker_profile.data["user_id"],
             "user_id": user["id"],
             "date": data.date,
             "time_slot": data.time_slot,
