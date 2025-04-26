@@ -165,6 +165,27 @@ NOTE: This is a system generated e-mail. Please do not reply to this e-mail."""
         server.sendmail(SMTP_USERNAME, email, msg.as_string())
 
 
+def send_speaker_booking_email(
+    email: str, client_email: str, date: str, time_slot: int, event: dict
+):
+    msg = MIMEText(
+        f"""
+Dear {email},
+{client_email} has booked a session with you on {date} at {time_slot}:00 UTC.
+
+Check the event details here: {event['htmlLink']}
+"""
+    )
+    msg["Subject"] = f"Session Booking on {event['description']}"
+    msg["From"] = SMTP_USERNAME
+    msg["To"] = email
+
+    recipients = [email, client_email]
+    with smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT) as server:
+        server.login(SMTP_USERNAME, SMTP_PASSWORD)
+        server.sendmail(SMTP_USERNAME, recipients, msg.as_string())
+
+
 class SpeakerProfile(BaseModel):
     expertise: str
     price_per_session: float
@@ -418,7 +439,7 @@ def book_session(data: SessionBooking, user=Depends(verify_user_token)):
     booked_slots = (
         supabase.table("sessions")
         .select("*")
-        .eq("speaker_id", data.speaker_id)
+        .eq("speaker_id", speaker_profile.data["user_id"])
         .eq("date", data.date)
         .eq("time_slot", data.time_slot)
         .execute()
@@ -453,6 +474,13 @@ def book_session(data: SessionBooking, user=Depends(verify_user_token)):
             "time_slot": data.time_slot,
         }
     ).execute()
+    send_speaker_booking_email(
+        speaker["email"],
+        user["email"],
+        data.date,
+        data.time_slot,
+        event,
+    )
     return {"status": "Session booked", "event": event}
 
 
