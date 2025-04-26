@@ -391,7 +391,7 @@ def book_session(data: SessionBooking, user=Depends(verify_user_token)):
     if not speaker_profile:
         raise HTTPException(status_code=404, detail="Speaker not found")
 
-    speaker_token = await get_tokens_from_supabase(data.speaker_id)
+    speaker_token = get_tokens_from_supabase(data.speaker_id)
     if not speaker_token:
         raise HTTPException(
             status_code=503, detail="Speaker didn't authorize, try again later!"
