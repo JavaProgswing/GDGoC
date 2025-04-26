@@ -49,6 +49,20 @@ class UserSignup(BaseModel):
     password: str
 
 
+class EmailVerification(BaseModel):
+    email: EmailStr
+
+
+class OTPVerification(BaseModel):
+    email: EmailStr
+    otp: str
+
+
+class UserLogin(BaseModel):
+    email: EmailStr
+    password: str
+
+
 def save_tokens_to_supabase(user_id: str, tokens: dict):
     expires_at = datetime.utcnow() + timedelta(seconds=tokens["expires_in"])
     data = {
@@ -226,11 +240,11 @@ def create_session_token(user_id: str) -> str:
 
 
 @app.post("/resend-otp")
-async def resend_otp(email: EmailStr):
+async def resend_otp(data: EmailVerification):
     user = (
         supabase.table("users")
         .select("*")
-        .eq("email", email.lower())
+        .eq("email", data.email.lower())
         .maybe_single()
         .execute()
     )
@@ -263,17 +277,17 @@ async def resend_otp(email: EmailStr):
 
     otp = generate_otp()
     supabase.table("otps").insert({"user_id": user_id, "otp": otp}).execute()
-    send_otp_email(email, otp)
+    send_otp_email(data.email, otp)
 
     return {"status": "OTP resent"}
 
 
 @app.post("/verify-otp")
-async def verify_otp(email: str, otp: str):
+async def verify_otp(data: OTPVerification):
     user = (
         supabase.table("users")
         .select("*")
-        .eq("email", email.lower())
+        .eq("email", data.email.lower())
         .maybe_single()
         .execute()
     )
@@ -290,7 +304,7 @@ async def verify_otp(email: str, otp: str):
         supabase.table("otps")
         .select("*")
         .eq("user_id", user_id)
-        .eq("otp", otp)
+        .eq("otp", data.otp)
         .order("created_at", desc=True)
         .limit(1)
         .execute()
@@ -314,11 +328,11 @@ async def verify_otp(email: str, otp: str):
 
 
 @app.post("/login")
-async def login(email: str, password: str):
+async def login(data: UserLogin):
     result = (
         supabase.table("users")
         .select("*")
-        .eq("email", email.lower())
+        .eq("email", data.email.lower())
         .maybe_single()
         .execute()
     )
@@ -330,7 +344,7 @@ async def login(email: str, password: str):
     if not user["is_verified"]:
         raise HTTPException(status_code=403, detail="User not verified")
 
-    if not bcrypt.verify(password, user["password_hash"]):
+    if not bcrypt.verify(data.password, user["password_hash"]):
         raise HTTPException(status_code=401, detail="Incorrect password")
 
     return {
@@ -361,8 +375,6 @@ def signup(user: UserSignup):
         .execute()
     )
     user_id = user_insert.data[0]["id"]
-    print(f"User ID: {user_id}", flush=True)
-    print(user_insert.data, flush=True)
     otp = generate_otp()
     supabase.table("otps").insert({"user_id": user_id, "otp": otp}).execute()
     send_otp_email(user.email, otp)
