@@ -435,7 +435,7 @@ def book_session(data: SessionBooking, user=Depends(verify_user_token)):
         .eq("id", speaker_profile.data["user_id"])
         .single()
         .execute()
-    )
+    ).data
     event = create_calendar_event(
         speaker_token,
         f"Session with {speaker['email']}",
