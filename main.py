@@ -439,7 +439,7 @@ def book_session(data: SessionBooking, user=Depends(verify_user_token)):
     booked_slots = (
         supabase.table("sessions")
         .select("*")
-        .eq("speaker_id", speaker_profile.data["user_id"])
+        .eq("speaker_id", speaker_profile.data["id"])
         .eq("date", data.date)
         .eq("time_slot", data.time_slot)
         .execute()
@@ -457,6 +457,15 @@ def book_session(data: SessionBooking, user=Depends(verify_user_token)):
         .single()
         .execute()
     ).data
+
+    supabase.table("sessions").insert(
+        {
+            "speaker_id": speaker_profile.data["id"],
+            "user_id": user["id"],
+            "date": data.date,
+            "time_slot": data.time_slot,
+        }
+    ).execute()
     event = create_calendar_event(
         speaker_token,
         f"Session with {speaker['email']}",
@@ -465,26 +474,14 @@ def book_session(data: SessionBooking, user=Depends(verify_user_token)):
         current_datetime + timedelta(hours=1),
         [{"email": user["email"]}],
     )
-    tr = None
-    try:
-        supabase.table("sessions").insert(
-            {
-                "speaker_id": speaker_profile.data["user_id"],
-                "user_id": user["id"],
-                "date": data.date,
-                "time_slot": data.time_slot,
-            }
-        ).execute()
-        send_speaker_booking_email(
-            speaker["email"],
-            user["email"],
-            data.date,
-            data.time_slot,
-            event,
-        )
-    except Exception as e:
-        tr = traceback.format_exc()
-    return {"status": "Session booked", "event": event, "tr": tr}
+    send_speaker_booking_email(
+        speaker["email"],
+        user["email"],
+        data.date,
+        data.time_slot,
+        event,
+    )
+    return {"status": "Session booked", "event": event}
 
 
 @app.post("/speakers/signup")
