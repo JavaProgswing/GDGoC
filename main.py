@@ -628,8 +628,13 @@ async def exchange_code_for_tokens(code: str) -> dict:
             headers={"Content-Type": "application/x-www-form-urlencoded"},
         )
 
-        response.raise_for_status()
-        return response.json()
+        response_json = response.json()
+        if response.status_code != 200:
+            raise HTTPException(
+                status_code=response.status_code,
+                detail=response_json.get("error_description", "Invalid callback code"),
+            )
+        return response_json
 
 
 async def get_google_user_info(access_token: str):
@@ -638,14 +643,8 @@ async def get_google_user_info(access_token: str):
             "https://www.googleapis.com/oauth2/v3/userinfo",
             headers={"Authorization": f"Bearer {access_token}"},
         )
-
-        response_json = response.json()
-        if response.status_code != 200:
-            raise HTTPException(
-                status_code=response.status_code,
-                detail=response_json.get("error_description", "Invalid callback code"),
-            )
-        return response_json
+        response.raise_for_status()
+        return response.json()
 
 
 @app.get("/callback")
