@@ -100,6 +100,7 @@ def generate_otp():
 
 
 async def cleanup_expired_otps():
+    print("Starting OTP cleanup task", flush=True)
     while True:
         cutoff = (datetime.utcnow() - timedelta(minutes=10)).isoformat()
         result = (
@@ -114,6 +115,7 @@ async def cleanup_expired_otps():
 
 
 async def refresh_google_tokens():
+    print("Starting Google token refresh task", flush=True)
     while True:
         now = datetime.utcnow().isoformat()
         tokens_result = (
