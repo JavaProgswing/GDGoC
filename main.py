@@ -361,6 +361,8 @@ def signup(user: UserSignup):
         .execute()
     )
     user_id = user_insert.data[0]["id"]
+    print(f"User ID: {user_id}", flush=True)
+    print(user_insert.data, flush=True)
     otp = generate_otp()
     supabase.table("otps").insert({"user_id": user_id, "otp": otp}).execute()
     send_otp_email(user.email, otp)
