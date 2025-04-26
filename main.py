@@ -269,7 +269,7 @@ async def resend_otp(data: EmailVerification):
         otp_created = datetime.fromisoformat(
             recent_otp.data[0]["created_at"].replace("Z", "+00:00")
         )
-        if datetime.utcnow() - otp_created < timedelta(minutes=2):
+        if datetime.utcnow(timezone.utc) - otp_created < timedelta(minutes=2):
             raise HTTPException(
                 status_code=429,
                 detail="OTP recently sent. Please wait before requesting a new one.",
