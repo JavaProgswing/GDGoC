@@ -396,13 +396,28 @@ def book_session(data: SessionBooking, user=Depends(verify_user_token)):
         raise HTTPException(
             status_code=503, detail="Speaker didn't authorize, try again later!"
         )
-    print(f"Speaker token: {speaker_token}", flush=True)
 
-    """
     try:
         current_date = data.to_datetime_utc()
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid date format(YYYY-MM-DD)")
+
+    if current_date < datetime.now(timezone.utc):
+        raise HTTPException(status_code=400, detail="Date is in the past")
+
+    booked_slots = (
+        supabase.table("sessions")
+        .select("*")
+        .eq("speaker_id", data.speaker_id)
+        .eq("date", data.date)
+        .eq("time_slot", data.time_slot)
+        .execute()
+    )
+    if booked_slots:
+        raise HTTPException(
+            status_code=400,
+            detail="Speaker is already booked for the selected date and time slot",
+        )
 
     speaker = (
         supabase.table("users")
@@ -419,16 +434,16 @@ def book_session(data: SessionBooking, user=Depends(verify_user_token)):
         current_date + timedelta(hours=1),
         [{"email": user["email"]}],
     )
-    
+
     supabase.table("sessions").insert(
         {
             "speaker_id": data.speaker_id,
-            "user_id": user_id,
+            "user_id": user["id"],
             "date": data.date,
             "time_slot": data.time_slot,
         }
-    ).execute()"""
-    return {"status": "Session booked", "event": None}
+    ).execute()
+    return {"status": "Session booked", "event": event}
 
 
 @app.post("/speakers/signup")
