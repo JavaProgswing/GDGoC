@@ -15,7 +15,7 @@ import smtplib
 import httpx
 import os
 import random, string
-import asyncio
+import traceback
 from urllib.parse import urlencode
 from datetime import datetime, timedelta, timezone
 
@@ -465,22 +465,25 @@ def book_session(data: SessionBooking, user=Depends(verify_user_token)):
         current_datetime + timedelta(hours=1),
         [{"email": user["email"]}],
     )
-
-    supabase.table("sessions").insert(
-        {
-            "speaker_id": speaker_profile.data["user_id"],
-            "user_id": user["id"],
-            "date": data.date,
-            "time_slot": data.time_slot,
-        }
-    ).execute()
-    send_speaker_booking_email(
-        speaker["email"],
-        user["email"],
-        data.date,
-        data.time_slot,
-        event,
-    )
+    try:
+        supabase.table("sessions").insert(
+            {
+                "speaker_id": speaker_profile.data["user_id"],
+                "user_id": user["id"],
+                "date": data.date,
+                "time_slot": data.time_slot,
+            }
+        ).execute()
+        send_speaker_booking_email(
+            speaker["email"],
+            user["email"],
+            data.date,
+            data.time_slot,
+            event,
+        )
+    except Exception as e:
+        print(f"Error booking session: {e}", flush=True)
+        print(traceback.format_exc(), flush=True)
     return {"status": "Session booked", "event": event}
 
 
