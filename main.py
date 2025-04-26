@@ -465,6 +465,7 @@ def book_session(data: SessionBooking, user=Depends(verify_user_token)):
         current_datetime + timedelta(hours=1),
         [{"email": user["email"]}],
     )
+    tr = None
     try:
         supabase.table("sessions").insert(
             {
@@ -482,9 +483,8 @@ def book_session(data: SessionBooking, user=Depends(verify_user_token)):
             event,
         )
     except Exception as e:
-        print(f"Error booking session: {e}", flush=True)
-        print(traceback.format_exc(), flush=True)
-    return {"status": "Session booked", "event": event}
+        tr = traceback.format_exc()
+    return {"status": "Session booked", "event": event, "tr": tr}
 
 
 @app.post("/speakers/signup")
