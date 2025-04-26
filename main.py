@@ -1,25 +1,22 @@
-from fastapi import FastAPI, HTTPException, Request
-from pydantic import BaseModel, EmailStr
-from supabase import create_client, Client
+from fastapi import FastAPI, HTTPException, Request, Depends
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
-import os
-from fastapi.security import HTTPBearer
-from datetime import datetime, timedelta
-import httpx
-import smtplib
-from email.mime.text import MIMEText
+from supabase import create_client, Client
+from pydantic import BaseModel, EmailStr
 from passlib.hash import bcrypt
+from jose import jwt, JWTError
+from google.oauth2.credentials import Credentials
+from googleapiclient.discovery import build
+from email.mime.text import MIMEText
+import smtplib
+import httpx
+import os
 import random, string
 import asyncio
 from urllib.parse import urlencode
-from jose import jwt, JWTError
-from fastapi import Depends
-from fastapi.security import HTTPAuthorizationCredentials
-from google.oauth2.credentials import Credentials
-from googleapiclient.discovery import build
 from datetime import datetime, timedelta, timezone
 
 app = FastAPI(
@@ -79,7 +76,7 @@ def save_tokens_to_supabase(user_id: str, tokens: dict):
 LEAWAY_SECONDS = 30
 
 
-async def get_tokens_from_supabase(user_id: str):
+def get_tokens_from_supabase(user_id: str):
     result = (
         supabase.table("oauth_tokens")
         .select("*")
@@ -100,9 +97,9 @@ async def get_tokens_from_supabase(user_id: str):
             return token
 
     refresh_token = token["refresh_token"]
-    async with httpx.AsyncClient() as client:
-        try:
-            response = await client.post(
+    try:
+        with httpx.Client() as client:
+            response = client.post(
                 "https://oauth2.googleapis.com/token",
                 data={
                     "client_id": GOOGLE_CLIENT_ID,
@@ -127,9 +124,9 @@ async def get_tokens_from_supabase(user_id: str):
 
             return new_tokens
 
-        except httpx.HTTPError as e:
-            print("Error refreshing token:", e)
-            return None
+    except httpx.HTTPError as e:
+        print("Error refreshing token:", e)
+        return None
 
 
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID")
@@ -316,7 +313,10 @@ async def verify_otp(data: OTPVerification):
     if user.data["type"] == "user":
         return {"status": "OTP verified"}
     else:
-        return {"status": "OTP verified", "redirect_url": get_google_auth_url()}
+        return {
+            "status": "OTP verified, login with google oauth and setup the speaker profile on /speakers/profile",
+            "redirect_url": get_google_auth_url(),
+        }
 
 
 @app.post("/login")
@@ -381,53 +381,54 @@ def book_session(data: SessionBooking, user=Depends(verify_user_token)):
             status_code=400,
             detail="Invalid time slot, must be between 9(9 AM) and 15(3 PM)",
         )
+    speaker_profile = (
+        supabase.table("speaker_profiles")
+        .select("*")
+        .eq("user_id", data.speaker_id)
+        .maybe_single()
+        .execute()
+    )
+    if not speaker_profile:
+        raise HTTPException(status_code=404, detail="Speaker not found")
+
+    speaker_token = await get_tokens_from_supabase(data.speaker_id)
+    if not speaker_token:
+        raise HTTPException(
+            status_code=503, detail="Speaker didn't authorize, try again later!"
+        )
+    print(f"Speaker token: {speaker_token}", flush=True)
+
+    """
     try:
-        speaker_profile = (
-            supabase.table("speaker_profiles")
-            .select("*")
-            .eq("user_id", data.speaker_id)
-            .maybe_single()
-            .execute()
-        )
-        if not speaker_profile:
-            raise HTTPException(status_code=404, detail="Speaker not found")
+        current_date = data.to_datetime_utc()
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid date format(YYYY-MM-DD)")
 
-        speaker_token = get_tokens_from_supabase(data.speaker_id)
-        if not speaker_token:
-            raise HTTPException(
-                status_code=503, detail="Speaker didn't authorize, try again later!"
-            )
-        print(f"Speaker token: {speaker_token}", flush=True)
-
-        """
-        speaker = (
-            supabase.table("users")
-            .select("*")
-            .eq("id", speaker_profile.data["user_id"])
-            .maybe_single()
-            .execute()
-        )
-        event = create_calendar_event(
-            speaker_token,
-            f"Session with {speaker['email']}",
-            speaker_profile.data["expertise"],
-            data.to_datetime_utc(),
-            data.to_datetime_utc() + timedelta(hours=1),
-            [{"email": user["email"]}],
-        )
-        
-        supabase.table("sessions").insert(
-            {
-                "speaker_id": data.speaker_id,
-                "user_id": user_id,
-                "date": data.date,
-                "time_slot": data.time_slot,
-            }
-        ).execute()"""
-        return {"status": "Session booked", "event": None}
-    except Exception as e:
-        print(f"Error booking session: {e}", flush=True)
-        print(f"Error type: {type(e)}", flush=True)
+    speaker = (
+        supabase.table("users")
+        .select("*")
+        .eq("id", speaker_profile.data["user_id"])
+        .maybe_single()
+        .execute()
+    )
+    event = create_calendar_event(
+        speaker_token,
+        f"Session with {speaker['email']}",
+        speaker_profile.data["expertise"],
+        current_date,
+        current_date + timedelta(hours=1),
+        [{"email": user["email"]}],
+    )
+    
+    supabase.table("sessions").insert(
+        {
+            "speaker_id": data.speaker_id,
+            "user_id": user_id,
+            "date": data.date,
+            "time_slot": data.time_slot,
+        }
+    ).execute()"""
+    return {"status": "Session booked", "event": None}
 
 
 @app.post("/speakers/signup")
