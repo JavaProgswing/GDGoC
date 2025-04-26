@@ -408,7 +408,7 @@ def book_session(data: SessionBooking, user=Depends(verify_user_token)):
     if not (9 <= data.time_slot <= 15):
         raise HTTPException(
             status_code=400,
-            detail="Invalid time slot, must be between 9(9 AM) and 15(3 PM)",
+            detail="Invalid time slot, must be between 9(9 AM UTC) and 15(3 PM UTC)",
         )
     speaker_profile = (
         supabase.table("speaker_profiles")
