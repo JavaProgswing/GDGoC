@@ -288,6 +288,14 @@ async def verify_otp(data: OTPVerification):
     if user.data["is_verified"]:
         raise HTTPException(status_code=400, detail="User already verified")
 
+    if user.data["type"] == "speaker":
+        tokens = get_tokens_from_supabase(user.data["id"])
+        if not tokens:
+            raise HTTPException(
+                status_code=400,
+                detail="Authorize with google first using redirect_url, try again!",
+                headers={"redirect_url": get_google_auth_url()},
+            )
     user_id = user.data["id"]
 
     otp_record = (
