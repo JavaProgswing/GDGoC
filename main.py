@@ -320,7 +320,9 @@ async def verify_otp(data: OTPVerification):
         raise HTTPException(status_code=400, detail="OTP expired")
 
     supabase.table("otps").delete().eq("user_id", user.data["id"]).execute()
-
+    supabase.table("users").update({"is_verified": True}).eq(
+        "id", user.data["id"]
+    ).execute()
     if user.data["type"] == "user":
         return {"status": "OTP verified"}
     else:
