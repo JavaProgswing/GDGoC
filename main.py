@@ -5,7 +5,7 @@ from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from supabase import create_client, Client
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from passlib.hash import bcrypt
 from jose import jwt, JWTError
 from google.oauth2.credentials import Credentials
@@ -42,22 +42,38 @@ security = HTTPBearer()
 
 
 class UserSignup(BaseModel):
-    email: EmailStr
-    password: str
+    email: EmailStr = Field(..., example="user@example.com")
+    password: str = Field(..., example="password123")
 
 
 class EmailVerification(BaseModel):
-    email: EmailStr
+    email: EmailStr = Field(..., example="user@example.com")
 
 
 class OTPVerification(BaseModel):
-    email: EmailStr
-    otp: str
+    email: EmailStr = Field(..., example="user@example.com")
+    otp: str = Field(..., example="123456")
 
 
 class UserLogin(BaseModel):
-    email: EmailStr
-    password: str
+    email: EmailStr = Field(..., example="user@example.com")
+    password: str = Field(..., example="password123")
+
+
+class SpeakerProfile(BaseModel):
+    expertise: str = Field(..., example="Cybersecurity")
+    price_per_session: float = Field(..., example=15.50)
+
+
+class SessionBooking(BaseModel):
+    speaker_id: str = Field(..., example="uuid-of-speaker")
+    date: str = Field(..., example="2025-05-01")
+    time_slot: int = Field(..., example=9)
+
+    def to_datetime_utc(self) -> datetime:
+        return datetime.strptime(self.date, "%Y-%m-%d").replace(
+            hour=self.time_slot, minute=0, second=0, tzinfo=timezone.utc
+        )
 
 
 def save_tokens_to_supabase(user_id: str, tokens: dict):
@@ -186,11 +202,6 @@ Check the event details here: {event['htmlLink']}
         server.sendmail(SMTP_USERNAME, recipients, msg.as_string())
 
 
-class SpeakerProfile(BaseModel):
-    expertise: str
-    price_per_session: float
-
-
 def verify_speaker_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
     try:
         payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=["HS256"])
@@ -207,17 +218,6 @@ def verify_speaker_token(credentials: HTTPAuthorizationCredentials = Depends(sec
         return user_id
     except JWTError:
         raise HTTPException(status_code=401, detail="Invalid token")
-
-
-class SessionBooking(BaseModel):
-    speaker_id: str
-    date: str  # Format: YYYY-MM-DD
-    time_slot: int  # 9 to 15
-
-    def to_datetime_utc(self) -> datetime:
-        return datetime.strptime(self.date, "%Y-%m-%d").replace(
-            hour=self.time_slot, minute=0, second=0, tzinfo=timezone.utc
-        )
 
 
 def verify_user_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
@@ -247,7 +247,20 @@ def create_session_token(user_id: str) -> str:
     return jwt.encode(payload, JWT_SECRET, algorithm="HS256")
 
 
-@app.post("/resend-otp")
+@app.post(
+    "/resend-otp",
+    tags=["Authentication"],
+    summary="Resend OTP",
+    description="Resend a new OTP to the registered email for verification.",
+    responses={
+        200: {
+            "description": "OTP resent successfully",
+            "content": {"application/json": {"example": {"status": "OTP resent"}}},
+        },
+        400: {"description": "Email not registered or already verified"},
+        429: {"description": "OTP recently sent. Please wait."},
+    },
+)
 async def resend_otp(data: EmailVerification):
     user = (
         supabase.table("users")
@@ -290,7 +303,21 @@ async def resend_otp(data: EmailVerification):
     return {"status": "OTP resent"}
 
 
-@app.post("/verify-otp")
+@app.post(
+    "/verify-otp",
+    tags=["Authentication"],
+    summary="Verify OTP",
+    description="Verify the OTP sent to the user's email during signup.",
+    responses={
+        200: {
+            "description": "OTP verified successfully",
+            "content": {"application/json": {"example": {"status": "OTP verified"}}},
+        },
+        400: {
+            "description": "Invalid OTP or expired, user already verified, or email not registered."
+        },
+    },
+)
 async def verify_otp(data: OTPVerification):
     user = (
         supabase.table("users")
@@ -348,7 +375,29 @@ async def verify_otp(data: OTPVerification):
         }
 
 
-@app.post("/login")
+@app.post(
+    "/login",
+    tags=["Authentication"],
+    summary="Login User",
+    description="Login using email and password after verifying OTP.",
+    responses={
+        200: {
+            "description": "Login successful",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "message": "Login successful",
+                        "user_id": "uuid-here",
+                        "token": "jwt-token-here",
+                    }
+                }
+            },
+        },
+        400: {"description": "Email not registered"},
+        401: {"description": "Incorrect password"},
+        403: {"description": "User not verified"},
+    },
+)
 async def login(data: UserLogin):
     result = (
         supabase.table("users")
@@ -375,7 +424,19 @@ async def login(data: UserLogin):
     }
 
 
-@app.post("/users/signup")
+@app.post(
+    "/users/signup",
+    tags=["Authentication"],
+    summary="User Signup",
+    description="Signup as a normal user and receive OTP via email for verification.",
+    responses={
+        200: {
+            "description": "OTP sent for email verification",
+            "content": {"application/json": {"example": {"status": "OTP sent"}}},
+        },
+        400: {"description": "Email already registered"},
+    },
+)
 def signup(user: UserSignup):
     existing_user = (
         supabase.table("users")
@@ -403,7 +464,31 @@ def signup(user: UserSignup):
     return {"status": "OTP sent"}
 
 
-@app.post("/sessions/book")
+@app.post(
+    "/sessions/book",
+    tags=["Booking"],
+    summary="Book a Session",
+    description="Users can book a session with a speaker for a given date and time slot.",
+    responses={
+        200: {
+            "description": "Session booked successfully",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "status": "Session booked",
+                        "event": {
+                            "id": "event-id",
+                            "htmlLink": "https://calendar.google.com/event-link",
+                        },
+                    }
+                }
+            },
+        },
+        400: {"description": "Invalid input or speaker unavailable"},
+        404: {"description": "Speaker not found"},
+        503: {"description": "Speaker authorization missing"},
+    },
+)
 def book_session(data: SessionBooking, user=Depends(verify_user_token)):
     if not (9 <= data.time_slot <= 15):
         raise HTTPException(
@@ -484,7 +569,19 @@ def book_session(data: SessionBooking, user=Depends(verify_user_token)):
     return {"status": "Session booked", "event": event}
 
 
-@app.post("/speakers/signup")
+@app.post(
+    "/speakers/signup",
+    tags=["Authentication"],
+    summary="Speaker Signup",
+    description="Signup as a speaker and receive OTP for verification. Requires Google OAuth authorization after verification.",
+    responses={
+        200: {
+            "description": "OTP sent for speaker verification",
+            "content": {"application/json": {"example": {"status": "OTP sent"}}},
+        },
+        400: {"description": "Email already registered"},
+    },
+)
 def speakers_signup(user: UserSignup):
     existing_user = (
         supabase.table("users")
@@ -518,7 +615,22 @@ def speakers_signup(user: UserSignup):
     return {"status": "OTP sent"}
 
 
-@app.get("/sessions/booked/{speaker_id}/{date}")
+@app.get(
+    "/sessions/booked/{speaker_id}/{date}",
+    tags=["Booking"],
+    summary="Get Booked Slots",
+    description="Retrieve the list of time slots already booked for a speaker on a specific date.",
+    responses={
+        200: {
+            "description": "List of booked slots",
+            "content": {
+                "application/json": {"example": [{"time_slot": 9}, {"time_slot": 10}]}
+            },
+        },
+        400: {"description": "Invalid date format"},
+        404: {"description": "Speaker not found"},
+    },
+)
 def get_booked_slots(speaker_id: str, date: str):
     speaker_profile = (
         supabase.table("speaker_profiles")
@@ -547,7 +659,28 @@ def get_booked_slots(speaker_id: str, date: str):
     return result.data
 
 
-@app.get("/speakers")
+@app.get(
+    "/speakers",
+    tags=["Speakers"],
+    summary="Get All Speakers",
+    description="Retrieve a list of all speaker profiles with expertise and price.",
+    responses={
+        200: {
+            "description": "List of speakers",
+            "content": {
+                "application/json": {
+                    "example": [
+                        {
+                            "user_id": "speaker-uuid",
+                            "expertise": "Cybersecurity",
+                            "price_per_session": 100.0,
+                        }
+                    ]
+                }
+            },
+        },
+    },
+)
 def get_all_speakers():
     result = (
         supabase.table("speaker_profiles")
@@ -557,7 +690,19 @@ def get_all_speakers():
     return result.data
 
 
-@app.post("/speakers/profile")
+@app.post(
+    "/speakers/profile",
+    tags=["Speakers"],
+    summary="Create Speaker Profile",
+    description="Allows a speaker to create their profile with expertise and price per session.",
+    responses={
+        200: {
+            "description": "Profile created successfully",
+            "content": {"application/json": {"example": {"status": "Profile created"}}},
+        },
+        400: {"description": "Profile already exists"},
+    },
+)
 def create_speaker_profile(
     profile: SpeakerProfile, user_id: str = Depends(verify_speaker_token)
 ):
@@ -679,7 +824,19 @@ async def get_google_user_info(access_token: str):
         return response.json()
 
 
-@app.get("/callback")
+@app.get(
+    "/callback",
+    tags=["OAuth"],
+    summary="OAuth Callback",
+    description="Callback endpoint for Google OAuth. Saves access and refresh tokens to the database.",
+    responses={
+        200: {
+            "description": "OAuth success",
+            "content": {"application/json": {"example": {"status": "success"}}},
+        },
+        400: {"description": "Missing or invalid authorization code"},
+    },
+)
 async def oauth_callback(request: Request):
     code = request.query_params.get("code")
     if not code:
