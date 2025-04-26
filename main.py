@@ -193,6 +193,9 @@ class SessionBooking(BaseModel):
     date: str  # Format: YYYY-MM-DD
     time_slot: int  # 9 to 15
 
+    def to_date_utc(self) -> datetime:
+        return datetime.strptime(self.date, "%Y-%m-%d")
+
     def to_datetime_utc(self) -> datetime:
         return datetime.strptime(self.date, "%Y-%m-%d").replace(
             hour=self.time_slot, minute=0, second=0, tzinfo=timezone.utc
@@ -398,20 +401,21 @@ def book_session(data: SessionBooking, user=Depends(verify_user_token)):
         )
 
     try:
-        current_date = data.to_datetime_utc()
+        current_datetime = data.to_datetime_utc()
     except ValueError:
         raise HTTPException(
             status_code=400, detail="Invalid date format. Use YYYY-MM-DD"
         )
 
-    if current_date < datetime.now(timezone.utc):
+    if current_datetime < datetime.now(timezone.utc):
         raise HTTPException(status_code=400, detail="Date is in the past")
 
+    current_date = data.to_date_utc()
     booked_slots = (
         supabase.table("sessions")
         .select("*")
         .eq("speaker_id", data.speaker_id)
-        .eq("date", data.date)
+        .eq("date", current_date)
         .eq("time_slot", data.time_slot)
         .execute()
     )
@@ -432,8 +436,8 @@ def book_session(data: SessionBooking, user=Depends(verify_user_token)):
         speaker_token,
         f"Session with {speaker['email']}",
         speaker_profile.data["expertise"],
-        current_date,
-        current_date + timedelta(hours=1),
+        current_datetime,
+        current_datetime + timedelta(hours=1),
         [{"email": user["email"]}],
     )
 
@@ -441,7 +445,7 @@ def book_session(data: SessionBooking, user=Depends(verify_user_token)):
         {
             "speaker_id": data.speaker_id,
             "user_id": user["id"],
-            "date": data.date,
+            "date": current_date,
             "time_slot": data.time_slot,
         }
     ).execute()
@@ -494,6 +498,12 @@ def get_booked_slots(speaker_id: str, date: str):
     if not speaker_profile:
         raise HTTPException(status_code=404, detail="Speaker not found")
 
+    try:
+        date = datetime.strptime(date, "%Y-%m-%d")
+    except ValueError:
+        raise HTTPException(
+            status_code=400, detail="Invalid date format. Use YYYY-MM-DD"
+        )
     result = (
         supabase.table("sessions")
         .select("time_slot")
