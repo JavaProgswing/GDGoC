@@ -400,7 +400,9 @@ def book_session(data: SessionBooking, user=Depends(verify_user_token)):
     try:
         current_date = data.to_datetime_utc()
     except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid date format(YYYY-MM-DD)")
+        raise HTTPException(
+            status_code=400, detail="Invalid date format. Use YYYY-MM-DD"
+        )
 
     if current_date < datetime.now(timezone.utc):
         raise HTTPException(status_code=400, detail="Date is in the past")
@@ -482,6 +484,16 @@ def speakers_signup(user: UserSignup):
 
 @app.get("/sessions/booked/{speaker_id}/{date}")
 def get_booked_slots(speaker_id: str, date: str):
+    speaker_profile = (
+        supabase.table("speaker_profiles")
+        .select("*")
+        .eq("user_id", speaker_id)
+        .maybe_single()
+        .execute()
+    )
+    if not speaker_profile:
+        raise HTTPException(status_code=404, detail="Speaker not found")
+
     result = (
         supabase.table("sessions")
         .select("time_slot")
@@ -489,14 +501,18 @@ def get_booked_slots(speaker_id: str, date: str):
         .eq("date", date)
         .execute()
     )
-    return [slot["time_slot"] for slot in result.data]
+
+    if not result:
+        return []
+
+    return [session["time_slot"] for session in result.data]
 
 
 @app.get("/speakers")
 def get_all_speakers():
     result = (
         supabase.table("speaker_profiles")
-        .select("id, user_id, expertise, price_per_session")
+        .select("user_id, expertise, price_per_session")
         .execute()
     )
     return result.data
