@@ -6,3 +6,4 @@ pydantic[email]
 passlib
 python-jose
 google-api-python-client
+email-validator
