@@ -492,7 +492,7 @@ def create_speaker_profile(
         .maybe_single()
         .execute()
     )
-    if existing.data:
+    if existing:
         raise HTTPException(status_code=400, detail="Profile already exists")
     supabase.table("speaker_profiles").insert(
         {
