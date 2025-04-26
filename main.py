@@ -81,13 +81,13 @@ def get_tokens_from_supabase(user_id: str):
         supabase.table("oauth_tokens")
         .select("*")
         .eq("user_id", user_id)
-        .single()
+        .maybe_single()
         .execute()
     )
-    token = result.data
-    if not token:
+    if not result:
         return None
 
+    token = result.data
     expires_at_str = token.get("expires_at")
     if expires_at_str:
         expires_at = datetime.fromisoformat(expires_at_str.replace("Z", "+00:00"))
@@ -419,7 +419,7 @@ def book_session(data: SessionBooking, user=Depends(verify_user_token)):
         .eq("time_slot", data.time_slot)
         .execute()
     )
-    if booked_slots:
+    if booked_slots.data:
         raise HTTPException(
             status_code=400,
             detail="Speaker is already booked for the selected date and time slot",
@@ -429,7 +429,7 @@ def book_session(data: SessionBooking, user=Depends(verify_user_token)):
         supabase.table("users")
         .select("*")
         .eq("id", speaker_profile.data["user_id"])
-        .maybe_single()
+        .single()
         .execute()
     )
     event = create_calendar_event(
@@ -512,10 +512,7 @@ def get_booked_slots(speaker_id: str, date: str):
         .execute()
     )
 
-    if not result:
-        return []
-
-    return [session["time_slot"] for session in result.data]
+    return result.data
 
 
 @app.get("/speakers")
@@ -641,8 +638,14 @@ async def get_google_user_info(access_token: str):
             "https://www.googleapis.com/oauth2/v3/userinfo",
             headers={"Authorization": f"Bearer {access_token}"},
         )
-        response.raise_for_status()
-        return response.json()
+
+        response_json = response.json()
+        if response.status_code != 200:
+            raise HTTPException(
+                status_code=response.status_code,
+                detail=response_json.get("error_description", "Invalid callback code"),
+            )
+        return response_json
 
 
 @app.get("/callback")
@@ -662,11 +665,11 @@ async def oauth_callback(request: Request):
         supabase.table("users")
         .select("*")
         .eq("email", user_email.lower())
-        .maybe_single()
+        .single()
         .execute()
     )
 
-    if not user.data:
+    if not user:
         raise HTTPException(status_code=400, detail="User not found")
 
     user_id = user.data["id"]
