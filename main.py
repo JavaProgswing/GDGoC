@@ -76,7 +76,10 @@ def save_tokens_to_supabase(user_id: str, tokens: dict):
     supabase.table("oauth_tokens").upsert(data).execute()
 
 
-def get_tokens_from_supabase(user_id: str):
+LEAWAY_SECONDS = 30
+
+
+async def get_tokens_from_supabase(user_id: str):
     result = (
         supabase.table("oauth_tokens")
         .select("*")
@@ -84,9 +87,49 @@ def get_tokens_from_supabase(user_id: str):
         .single()
         .execute()
     )
-    if result.data:
-        return result.data
-    return None
+    token = result.data
+    if not token:
+        return None
+
+    expires_at_str = token.get("expires_at")
+    if expires_at_str:
+        expires_at = datetime.fromisoformat(expires_at_str.replace("Z", "+00:00"))
+        now = datetime.now(timezone.utc)
+
+        if now + timedelta(seconds=LEAWAY_SECONDS) < expires_at:
+            return token
+
+    refresh_token = token["refresh_token"]
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.post(
+                "https://oauth2.googleapis.com/token",
+                data={
+                    "client_id": GOOGLE_CLIENT_ID,
+                    "client_secret": GOOGLE_CLIENT_SECRET,
+                    "refresh_token": refresh_token,
+                    "grant_type": "refresh_token",
+                },
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+            )
+            response.raise_for_status()
+            new_tokens = response.json()
+
+            if "refresh_token" not in new_tokens:
+                new_tokens["refresh_token"] = refresh_token
+
+            new_expires_at = datetime.now(timezone.utc) + timedelta(
+                seconds=new_tokens["expires_in"] - LEAWAY_SECONDS
+            )
+            new_tokens["expires_at"] = new_expires_at.isoformat()
+
+            save_tokens_to_supabase(user_id, new_tokens)
+
+            return new_tokens
+
+        except httpx.HTTPError as e:
+            print("Error refreshing token:", e)
+            return None
 
 
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID")
@@ -97,61 +140,6 @@ REDIRECT_URI = "https://speakersessionbooking.vercel.app/callback"
 
 def generate_otp():
     return "".join(random.choices(string.digits, k=6))
-
-
-async def cleanup_expired_otps():
-    print("Starting OTP cleanup task", flush=True)
-    while True:
-        cutoff = (datetime.utcnow() - timedelta(minutes=10)).isoformat()
-        result = (
-            supabase.table("otps")
-            .delete()
-            .or_(f"used.eq.true,created_at.lt.{cutoff}")
-            .execute()
-        )
-
-        print(f"Cleaned up {len(result.data)} OTPs")
-        await asyncio.sleep(10 * 60)
-
-
-async def refresh_google_tokens():
-    print("Starting Google token refresh task", flush=True)
-    while True:
-        now = datetime.utcnow().isoformat()
-        tokens_result = (
-            supabase.table("oauth_tokens").select("*").lt("expires_at", now).execute()
-        )
-
-        for token in tokens_result.data:
-            refresh_token = token["refresh_token"]
-            user_id = token["user_id"]
-            async with httpx.AsyncClient() as client:
-                try:
-                    response = await client.post(
-                        "https://oauth2.googleapis.com/token",
-                        data={
-                            "client_id": GOOGLE_CLIENT_ID,
-                            "client_secret": GOOGLE_CLIENT_SECRET,
-                            "refresh_token": refresh_token,
-                            "grant_type": "refresh_token",
-                        },
-                        headers={"Content-Type": "application/x-www-form-urlencoded"},
-                    )
-                    response.raise_for_status()
-                    new_tokens = response.json()
-                    new_tokens["refresh_token"] = refresh_token
-                    save_tokens_to_supabase(user_id, new_tokens)
-                    print(f"Refreshed token for user_id: {user_id}")
-                except Exception as e:
-                    print(f"Failed to refresh token for user_id {user_id}: {e}")
-
-        await asyncio.sleep(60 * 10)
-
-
-@app.on_event("startup")
-async def startup_event():
-    asyncio.create_task(cleanup_expired_otps())
-    asyncio.create_task(refresh_google_tokens())
 
 
 SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")
