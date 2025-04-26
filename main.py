@@ -247,6 +247,37 @@ def create_session_token(user_id: str) -> str:
     return jwt.encode(payload, JWT_SECRET, algorithm="HS256")
 
 
+@app.get(
+    "/",
+    tags=["General"],
+    summary="Welcome",
+    description="Welcome endpoint providing basic information about the API and links to documentation.",
+    response_model=dict,
+    responses={
+        200: {
+            "description": "Welcome",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "message": "Welcome to the Speaker Session Booking API!",
+                        "docs_url": "/docs",
+                        "redoc_url": "/redoc",
+                        "description": "Use these endpoints to signup, verify, login, and book sessions with speakers.",
+                    }
+                }
+            },
+        }
+    },
+)
+async def root():
+    return {
+        "message": "Welcome to the Speaker Session Booking API!",
+        "docs_url": "/docs",
+        "redoc_url": "/redoc",
+        "description": "Use these endpoints to signup, verify, login, and book sessions with speakers.",
+    }
+
+
 @app.post(
     "/resend-otp",
     tags=["Authentication"],
