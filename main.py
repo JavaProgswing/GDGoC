@@ -18,6 +18,7 @@ import random, string
 import traceback
 from urllib.parse import urlencode
 from datetime import datetime, timedelta, timezone
+import postgrest.exceptions
 
 app = FastAPI(
     title="Booking Platform API",
@@ -520,13 +521,18 @@ def book_session(data: SessionBooking, user=Depends(verify_user_token)):
             status_code=400,
             detail="Invalid time slot, must be between 9(9 AM UTC) and 15(3 PM UTC)",
         )
-    speaker_profile = (
-        supabase.table("speaker_profiles")
-        .select("*")
-        .eq("user_id", data.speaker_id)
-        .maybe_single()
-        .execute()
-    )
+
+    try:
+        speaker_profile = (
+            supabase.table("speaker_profiles")
+            .select("*")
+            .eq("user_id", data.speaker_id)
+            .maybe_single()
+            .execute()
+        )
+    except postgrest.exceptions.APIError:
+        speaker_profile = None
+
     if not speaker_profile:
         raise HTTPException(status_code=404, detail="Speaker not found")
 
@@ -657,13 +663,16 @@ def speakers_signup(user: UserSignup):
     },
 )
 def get_booked_slots(speaker_id: str, date: str):
-    speaker_profile = (
-        supabase.table("speaker_profiles")
-        .select("*")
-        .eq("id", speaker_id)
-        .maybe_single()
-        .execute()
-    )
+    try:
+        speaker_profile = (
+            supabase.table("speaker_profiles")
+            .select("*")
+            .eq("id", speaker_id)
+            .maybe_single()
+            .execute()
+        )
+    except postgrest.exceptions.APIError:
+        speaker_profile = None
     if not speaker_profile:
         raise HTTPException(status_code=404, detail="Speaker not found")
 
