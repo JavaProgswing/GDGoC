@@ -706,6 +706,7 @@ def get_booked_slots(speaker_id: str, date: str):
                     "example": [
                         {
                             "user_id": "speaker-uuid",
+                            "user_email": "speaker-email@example.com",
                             "expertise": "Cybersecurity",
                             "price_per_session": 100.0,
                         }
@@ -721,7 +722,21 @@ def get_all_speakers():
         .select("user_id, expertise, price_per_session")
         .execute()
     )
-    return result.data
+    speakers = [
+        {
+            "user_id": speaker["user_id"],
+            "user_email": supabase.table("users")
+            .select("email")
+            .eq("id", speaker["user_id"])
+            .single()
+            .execute()
+            .data["email"],
+            "expertise": speaker["expertise"],
+            "price_per_session": speaker["price_per_session"],
+        }
+        for speaker in result.data
+    ]
+    return speakers
 
 
 @app.post(
