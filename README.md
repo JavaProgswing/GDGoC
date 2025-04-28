@@ -70,8 +70,10 @@ This project enables users to browse available speakers, view expertise, and boo
 
 ## 🛡️ Authentication Flow
 
-1. User/ Speaker signs up ➔ Receives OTP ➔ Verifies OTP
+1. User signs up ➔ Receives OTP ➔ Verifies OTP
 2. Successful login ➔ Receives JWT token
 3. Token must be passed in the `Authorization: Bearer <token>` header for all protected routes
 
 ---
+
+> **Note:** Only the test users added to our Google Cloud Console project can successfully complete the signup process as a speaker account by authorizing with the Google OAuth flow.
