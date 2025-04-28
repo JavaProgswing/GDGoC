@@ -7,10 +7,8 @@ This project enables users to browse available speakers, view expertise, and boo
 
 ## 🚀 Live Deployment
 
-Hosted at: [https://speakersessionbooking.vercel.app/](https://speakersessionbooking.vercel.app/)
-
-API Documentation (Swagger):  
-- Visit [docs](https://speakersessionbooking.vercel.app/docs) to view API documentation.
+- Hosted at: [https://speakersessionbooking.vercel.app/](https://speakersessionbooking.vercel.app/)
+- API Documentation (Swagger): [https://speakersessionbooking.vercel.app/docs](https://speakersessionbooking.vercel.app/docs)
 
 ---
 
@@ -22,7 +20,7 @@ API Documentation (Swagger):
 - **Rate Limiting:** SlowAPI
 - **Email Service:** SMTP (Gmail)
 - **Google Calendar Integration:** Google OAuth2 API
-- **Hosting:** Vercel
+- **Hosting:** Vercel (Frontend)
 
 ---
 
@@ -40,18 +38,18 @@ API Documentation (Swagger):
 
 ### 3. Session Booking
 - Authenticated users can browse available speakers
-- Users can book a 1-hour time slot between **9 AM to 4 PM UTC**
-- Double bookings are prevented automatically
+- Users can book 1-hour time slots between **9 AM to 4 PM UTC**
+- Double booking is prevented automatically
 
 ### 4. Time Slot Blocking
-- Once a user books a session, the selected time slot is blocked from others
+- Once a session is booked, the selected time slot becomes unavailable
 
 ### 5. Email Notifications and Calendar Events
-- Email notifications are sent to both the speaker and user upon booking
-- A Google Calendar event is automatically created and shared with both parties
+- Email notifications are sent to both speaker and user upon booking
+- Google Calendar event is automatically created and shared with both parties
 
 ### 6. Documentation
-- Complete interactive API documentation available at `/docs` (Swagger UI)
+- Full interactive API documentation available at `/docs` (Swagger UI)
 - All request and response samples documented clearly
 
 ---
@@ -62,16 +60,18 @@ API Documentation (Swagger):
 |:-----------:|:-----------------:|:----------------:|
 | ![](screenshots/1-user-signup.png) | ![](screenshots/2-otp-verification.png) | ![](screenshots/3-login-success.png) |
 
-| Speaker Listing | Session Booking |
-|:---------------:|:----------------:|:---------------------:|
+| Speaker Listing | Session Booking (Step 1) | Session Booking (Step 2) |
+|:---------------:|:------------------------:|:------------------------:|
 | ![](screenshots/4-speaker-listing.png) | ![](screenshots/5-booking-session-1.png) | ![](screenshots/5-booking-session-2.png) |
 
-*(Screenshots are placed inside the `/screenshots` folder.)*
+> 📂 *Screenshots are placed inside the `/screenshots` folder.*
 
 ---
 
 ## 🛡️ Authentication Flow
 
 1. User/ Speaker signs up ➔ Receives OTP ➔ Verifies OTP
-2. Successful login ➔ Gets JWT token
-3. Token must be provided in the `Authorization: Bearer <token>` header for required endpoints
+2. Successful login ➔ Receives JWT token
+3. Token must be passed in the `Authorization: Bearer <token>` header for all protected routes
+
+---
