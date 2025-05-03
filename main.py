@@ -280,7 +280,7 @@ def create_session_token(user_id: str) -> str:
         }
     },
 )
-@limiter.limit("1/second")
+# @limiter.limit("1/second")
 async def root(request: Request):
     return {
         "message": "Welcome to the Speaker Session Booking API!",
@@ -304,7 +304,7 @@ async def root(request: Request):
         429: {"description": "OTP recently sent. Please wait."},
     },
 )
-@limiter.limit("5/20minute")
+# @limiter.limit("5/20minute")
 async def resend_otp(request: Request, data: EmailVerification):
     user = (
         supabase.table("users")
@@ -367,7 +367,7 @@ async def resend_otp(request: Request, data: EmailVerification):
         },
     },
 )
-@limiter.limit("9/45minute")
+# @limiter.limit("9/45minute")
 async def verify_otp(request: Request, data: OTPVerification):
     user = (
         supabase.table("users")
@@ -442,7 +442,7 @@ async def verify_otp(request: Request, data: OTPVerification):
         403: {"description": "User not verified"},
     },
 )
-@limiter.limit("3/20minute")
+# @limiter.limit("3/20minute")
 async def login(request: Request, data: UserLogin):
     result = (
         supabase.table("users")
@@ -482,7 +482,7 @@ async def login(request: Request, data: UserLogin):
         400: {"description": "Email already registered"},
     },
 )
-@limiter.limit("12/minute")
+# @limiter.limit("12/minute")
 def signup(request: Request, user: UserSignup):
     existing_user = (
         supabase.table("users")
@@ -535,7 +535,7 @@ def signup(request: Request, user: UserSignup):
         503: {"description": "Speaker authorization missing"},
     },
 )
-@limiter.limit("3/hour")
+# @limiter.limit("3/hour")
 def book_session(
     request: Request, data: SessionBooking, user=Depends(verify_user_token)
 ):
@@ -636,7 +636,7 @@ def book_session(
         400: {"description": "Email already registered"},
     },
 )
-@limiter.limit("12/minute")
+# @limiter.limit("12/minute")
 def speakers_signup(request: Request, user: UserSignup):
     existing_user = (
         supabase.table("users")
@@ -686,7 +686,7 @@ def speakers_signup(request: Request, user: UserSignup):
         404: {"description": "Speaker not found"},
     },
 )
-@limiter.limit("5/minute")
+# @limiter.limit("5/minute")
 def get_booked_slots(request: Request, speaker_id: str, date: str):
     try:
         speaker_profile = (
@@ -741,7 +741,7 @@ def get_booked_slots(request: Request, speaker_id: str, date: str):
         },
     },
 )
-@limiter.limit("5/minute")
+# @limiter.limit("5/minute")
 def get_all_speakers(request: Request):
     result = (
         supabase.table("speaker_profiles")
