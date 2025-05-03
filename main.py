@@ -766,7 +766,7 @@ def get_booked_slots(request: Request, speaker_id: str, date: str):
         speaker_profile = (
             supabase.table("speaker_profiles")
             .select("*")
-            .eq("id", speaker_id)
+            .eq("user_id", speaker_id)
             .maybe_single()
             .execute()
         )
