@@ -170,6 +170,55 @@ def get_tokens_from_supabase(user_id: str):
         return None
 
 
+def refresh_all_tokens():
+    try:
+        response = supabase.table("oauth_tokens").select("*").execute()
+        tokens = response.data
+        if not tokens:
+            print("No tokens found in the database.")
+            return
+
+        for token in tokens:
+            user_id = token.get("user_id")
+            refresh_token = token.get("refresh_token")
+
+            if not user_id or not refresh_token:
+                print(f"Skipping entry with missing user_id or refresh_token: {token}")
+                continue
+
+            try:
+                with httpx.Client() as client:
+                    res = client.post(
+                        "https://oauth2.googleapis.com/token",
+                        data={
+                            "client_id": GOOGLE_CLIENT_ID,
+                            "client_secret": GOOGLE_CLIENT_SECRET,
+                            "refresh_token": refresh_token,
+                            "grant_type": "refresh_token",
+                        },
+                        headers={"Content-Type": "application/x-www-form-urlencoded"},
+                    )
+                    res.raise_for_status()
+                    new_tokens = res.json()
+
+                    if "refresh_token" not in new_tokens:
+                        new_tokens["refresh_token"] = refresh_token
+
+                    new_expires_at = datetime.now(timezone.utc) + timedelta(
+                        seconds=new_tokens["expires_in"] - LEAWAY_SECONDS
+                    )
+                    new_tokens["expires_at"] = new_expires_at.isoformat()
+
+                    save_tokens_to_supabase(user_id, new_tokens)
+                    print(f"Refreshed token for user_id={user_id}")
+
+            except httpx.HTTPError as e:
+                print(f"Failed to refresh token for user_id={user_id}: {e}")
+
+    except Exception as e:
+        print("Unexpected error during batch refresh:", e)
+
+
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID")
 GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET")
 GOOGLE_OAUTH_REDIRECT_URI = "https://cdqntnxhyppwhnkbsmxu.supabase.co/auth/v1/callback"
@@ -306,6 +355,7 @@ def create_session_token(user_id: str) -> str:
 )
 @limiter.limit("1/second")
 async def root(request: Request):
+    refresh_all_tokens()
     return {
         "message": "Welcome to the Speaker Session Booking API!",
         "docs_url": "/docs",
