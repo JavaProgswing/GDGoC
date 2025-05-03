@@ -163,44 +163,54 @@ SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
 
 
 def send_otp_email(email: str, otp: str):
-    msg = MIMEText(
-        f"""
-Dear {email},
+    try:
+        msg = MIMEText(
+            f"""
+    Dear {email},
 
-Thank you for registering with us!
+    Thank you for registering with us!
 
-Please Enter OTP: {otp} to verify your identity, OTP is valid up to next 10 minutes. NEVER SHARE YOUR OTP WITH ANYONE.
+    Please Enter OTP: {otp} to verify your identity, OTP is valid up to next 10 minutes. NEVER SHARE YOUR OTP WITH ANYONE.
 
-NOTE: This is a system generated e-mail. Please do not reply to this e-mail."""
-    )
-    msg["Subject"] = "OTP for Speaker Session Booking Platform"
-    msg["From"] = SMTP_USERNAME
-    msg["To"] = email
+    NOTE: This is a system generated e-mail. Please do not reply to this e-mail."""
+        )
+        msg["Subject"] = "OTP for Speaker Session Booking Platform"
+        msg["From"] = SMTP_USERNAME
+        msg["To"] = email
 
-    with smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT) as server:
-        server.login(SMTP_USERNAME, SMTP_PASSWORD)
-        server.sendmail(SMTP_USERNAME, email, msg.as_string())
+        with smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT) as server:
+            server.login(SMTP_USERNAME, SMTP_PASSWORD)
+            server.sendmail(SMTP_USERNAME, email, msg.as_string())
+    except Exception as e:
+        print(f"Error sending email: {e}", flush=True)
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail="Failed to send OTP email")
 
 
 def send_speaker_booking_email(
     email: str, client_email: str, date: str, time_slot: int, event: dict
 ):
-    msg = MIMEText(
-        f"""
-Dear {email},
-{client_email} has booked a session with you on {date} at {time_slot}:00 UTC.
+    try:
+        msg = MIMEText(
+            f"""
+    Dear {email},
+    {client_email} has booked a session with you on {date} at {time_slot}:00 UTC.
 
-Check the event details here: {event['htmlLink']}
-"""
-    )
-    msg["Subject"] = f"Session Booking on {event['description']}"
-    msg["From"] = SMTP_USERNAME
-    msg["To"] = email
+    Check the event details here: {event['htmlLink']}
+    """
+        )
+        msg["Subject"] = f"Session Booking on {event['description']}"
+        msg["From"] = SMTP_USERNAME
+        msg["To"] = email
 
-    recipients = [email, client_email]
-    with smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT) as server:
-        server.login(SMTP_USERNAME, SMTP_PASSWORD)
-        server.sendmail(SMTP_USERNAME, recipients, msg.as_string())
+        recipients = [email, client_email]
+        with smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT) as server:
+            server.login(SMTP_USERNAME, SMTP_PASSWORD)
+            server.sendmail(SMTP_USERNAME, recipients, msg.as_string())
+    except Exception as e:
+        print(f"Error sending email: {e}", flush=True)
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail="Failed to send booking email")
 
 
 def verify_speaker_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
@@ -270,6 +280,7 @@ def create_session_token(user_id: str) -> str:
         }
     },
 )
+@limiter.limit("1/second")
 async def root():
     return {
         "message": "Welcome to the Speaker Session Booking API!",
@@ -293,6 +304,7 @@ async def root():
         429: {"description": "OTP recently sent. Please wait."},
     },
 )
+@limiter.limit("5/20minute")
 async def resend_otp(data: EmailVerification):
     user = (
         supabase.table("users")
@@ -322,10 +334,15 @@ async def resend_otp(data: EmailVerification):
         otp_created = datetime.fromisoformat(
             recent_otp.data[0]["created_at"].replace("Z", "+00:00")
         )
-        if datetime.now(timezone.utc) - otp_created < timedelta(minutes=2):
+        if datetime.now(timezone.utc) - otp_created < timedelta(minutes=13):
             raise HTTPException(
                 status_code=429,
                 detail="OTP recently sent. Please wait before requesting a new one.",
+                headers={
+                    "Retry-After": str(
+                        13 - (datetime.now(timezone.utc) - otp_created).seconds // 60
+                    )
+                },
             )
 
     otp = generate_otp()
@@ -350,6 +367,7 @@ async def resend_otp(data: EmailVerification):
         },
     },
 )
+@limiter.limit("9/45minute")
 async def verify_otp(data: OTPVerification):
     user = (
         supabase.table("users")
@@ -424,6 +442,7 @@ async def verify_otp(data: OTPVerification):
         403: {"description": "User not verified"},
     },
 )
+@limiter.limit("3/20minute")
 async def login(data: UserLogin):
     result = (
         supabase.table("users")
@@ -463,6 +482,7 @@ async def login(data: UserLogin):
         400: {"description": "Email already registered"},
     },
 )
+@limiter.limit("12/minute")
 def signup(user: UserSignup):
     existing_user = (
         supabase.table("users")
@@ -515,6 +535,7 @@ def signup(user: UserSignup):
         503: {"description": "Speaker authorization missing"},
     },
 )
+@limiter.limit("3/hour")
 def book_session(data: SessionBooking, user=Depends(verify_user_token)):
     if not (9 <= data.time_slot <= 15):
         raise HTTPException(
@@ -582,6 +603,13 @@ def book_session(data: SessionBooking, user=Depends(verify_user_token)):
             "time_slot": data.time_slot,
         }
     ).execute()
+    send_speaker_booking_email(
+        speaker["email"],
+        user["email"],
+        data.date,
+        data.time_slot,
+        event,
+    )
     event = create_calendar_event(
         speaker_token,
         f"Session with {speaker['email']}",
@@ -589,13 +617,6 @@ def book_session(data: SessionBooking, user=Depends(verify_user_token)):
         current_datetime,
         current_datetime + timedelta(hours=1),
         [{"email": user["email"]}],
-    )
-    send_speaker_booking_email(
-        speaker["email"],
-        user["email"],
-        data.date,
-        data.time_slot,
-        event,
     )
     return {"status": "Session booked", "event": event}
 
@@ -613,6 +634,7 @@ def book_session(data: SessionBooking, user=Depends(verify_user_token)):
         400: {"description": "Email already registered"},
     },
 )
+@limiter.limit("12/minute")
 def speakers_signup(user: UserSignup):
     existing_user = (
         supabase.table("users")
@@ -662,6 +684,7 @@ def speakers_signup(user: UserSignup):
         404: {"description": "Speaker not found"},
     },
 )
+@limiter.limit("5/minute")
 def get_booked_slots(speaker_id: str, date: str):
     try:
         speaker_profile = (
@@ -716,6 +739,7 @@ def get_booked_slots(speaker_id: str, date: str):
         },
     },
 )
+@limiter.limit("5/minute")
 def get_all_speakers():
     result = (
         supabase.table("speaker_profiles")
