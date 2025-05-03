@@ -1,5 +1,7 @@
 from fastapi import FastAPI, HTTPException, Request, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.responses import JSONResponse, PlainTextResponse
+from fastapi.exception_handlers import http_exception_handler
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
@@ -28,12 +30,31 @@ app = FastAPI(
 
 limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
-app.add_exception_handler(
-    RateLimitExceeded,
-    lambda req, exc: HTTPException(status_code=429, detail="Rate limit exceeded"),
-)
+@app.exception_handler(RateLimitExceeded)
+async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
+    return PlainTextResponse("Rate limit exceeded", status_code=429)
+
+
 app.add_middleware(SlowAPIMiddleware)
-# Load environment variables from .env file
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    tb = traceback.format_exc()
+    print(f"Unhandled error: {tb}")
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": "Internal Server Error",
+            "traceback": tb,
+        },
+    )
+
+
+@app.exception_handler(HTTPException)
+async def custom_http_exception_handler(request: Request, exc: HTTPException):
+    return await http_exception_handler(request, exc)
+
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
@@ -281,7 +302,7 @@ def create_session_token(user_id: str) -> str:
         }
     },
 )
-# @limiter.limit("1/second")
+@limiter.limit("1/second")
 async def root(request: Request):
     return {
         "message": "Welcome to the Speaker Session Booking API!",
@@ -305,7 +326,7 @@ async def root(request: Request):
         429: {"description": "OTP recently sent. Please wait."},
     },
 )
-# @limiter.limit("5/20minute")
+@limiter.limit("5/20minute")
 async def resend_otp(request: Request, data: EmailVerification):
     user = (
         supabase.table("users")
@@ -368,7 +389,7 @@ async def resend_otp(request: Request, data: EmailVerification):
         },
     },
 )
-# @limiter.limit("9/45minute")
+@limiter.limit("9/45minute")
 async def verify_otp(request: Request, data: OTPVerification):
     user = (
         supabase.table("users")
@@ -443,7 +464,7 @@ async def verify_otp(request: Request, data: OTPVerification):
         403: {"description": "User not verified"},
     },
 )
-# @limiter.limit("3/20minute")
+@limiter.limit("3/20minute")
 async def login(request: Request, data: UserLogin):
     result = (
         supabase.table("users")
@@ -483,7 +504,7 @@ async def login(request: Request, data: UserLogin):
         400: {"description": "Email already registered"},
     },
 )
-# @limiter.limit("12/minute")
+@limiter.limit("12/minute")
 def signup(request: Request, user: UserSignup):
     existing_user = (
         supabase.table("users")
@@ -536,7 +557,7 @@ def signup(request: Request, user: UserSignup):
         503: {"description": "Speaker authorization missing"},
     },
 )
-# @limiter.limit("3/hour")
+@limiter.limit("3/hour")
 def book_session(
     request: Request, data: SessionBooking, user=Depends(verify_user_token)
 ):
@@ -637,7 +658,7 @@ def book_session(
         400: {"description": "Email already registered"},
     },
 )
-# @limiter.limit("12/minute")
+@limiter.limit("12/minute")
 def speakers_signup(request: Request, user: UserSignup):
     existing_user = (
         supabase.table("users")
@@ -687,7 +708,7 @@ def speakers_signup(request: Request, user: UserSignup):
         404: {"description": "Speaker not found"},
     },
 )
-# @limiter.limit("5/minute")
+@limiter.limit("5/minute")
 def get_booked_slots(request: Request, speaker_id: str, date: str):
     try:
         speaker_profile = (
@@ -742,7 +763,7 @@ def get_booked_slots(request: Request, speaker_id: str, date: str):
         },
     },
 )
-# @limiter.limit("5/minute")
+@limiter.limit("5/minute")
 def get_all_speakers(request: Request):
     result = (
         supabase.table("speaker_profiles")
@@ -780,7 +801,9 @@ def get_all_speakers(request: Request):
     },
 )
 def create_speaker_profile(
-    request: Request, profile: SpeakerProfile, user_id: str = Depends(verify_speaker_token)
+    request: Request,
+    profile: SpeakerProfile,
+    user_id: str = Depends(verify_speaker_token),
 ):
     existing = (
         supabase.table("speaker_profiles")
