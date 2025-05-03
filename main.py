@@ -30,6 +30,8 @@ app = FastAPI(
 
 limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
+
+
 @app.exception_handler(RateLimitExceeded)
 async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
     return PlainTextResponse("Rate limit exceeded", status_code=429)
@@ -627,13 +629,6 @@ def book_session(
             "time_slot": data.time_slot,
         }
     ).execute()
-    send_speaker_booking_email(
-        speaker["email"],
-        user["email"],
-        data.date,
-        data.time_slot,
-        event,
-    )
     event = create_calendar_event(
         speaker_token,
         f"Session with {speaker['email']}",
@@ -641,6 +636,13 @@ def book_session(
         current_datetime,
         current_datetime + timedelta(hours=1),
         [{"email": user["email"]}],
+    )
+    send_speaker_booking_email(
+        speaker["email"],
+        user["email"],
+        data.date,
+        data.time_slot,
+        event,
     )
     return {"status": "Session booked", "event": event}
 
