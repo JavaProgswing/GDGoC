@@ -33,6 +33,7 @@ app.add_exception_handler(
     lambda req, exc: HTTPException(status_code=429, detail="Rate limit exceeded"),
 )
 app.add_middleware(SlowAPIMiddleware)
+# Load environment variables from .env file
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
