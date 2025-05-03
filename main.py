@@ -281,7 +281,7 @@ def create_session_token(user_id: str) -> str:
     },
 )
 @limiter.limit("1/second")
-async def root():
+async def root(request: Request):
     return {
         "message": "Welcome to the Speaker Session Booking API!",
         "docs_url": "/docs",
@@ -305,7 +305,7 @@ async def root():
     },
 )
 @limiter.limit("5/20minute")
-async def resend_otp(data: EmailVerification):
+async def resend_otp(request: Request, data: EmailVerification):
     user = (
         supabase.table("users")
         .select("*")
@@ -368,7 +368,7 @@ async def resend_otp(data: EmailVerification):
     },
 )
 @limiter.limit("9/45minute")
-async def verify_otp(data: OTPVerification):
+async def verify_otp(request: Request, data: OTPVerification):
     user = (
         supabase.table("users")
         .select("*")
@@ -443,7 +443,7 @@ async def verify_otp(data: OTPVerification):
     },
 )
 @limiter.limit("3/20minute")
-async def login(data: UserLogin):
+async def login(request: Request, data: UserLogin):
     result = (
         supabase.table("users")
         .select("*")
@@ -483,7 +483,7 @@ async def login(data: UserLogin):
     },
 )
 @limiter.limit("12/minute")
-def signup(user: UserSignup):
+def signup(request: Request, user: UserSignup):
     existing_user = (
         supabase.table("users")
         .select("*")
@@ -536,7 +536,9 @@ def signup(user: UserSignup):
     },
 )
 @limiter.limit("3/hour")
-def book_session(data: SessionBooking, user=Depends(verify_user_token)):
+def book_session(
+    request: Request, data: SessionBooking, user=Depends(verify_user_token)
+):
     if not (9 <= data.time_slot <= 15):
         raise HTTPException(
             status_code=400,
@@ -635,7 +637,7 @@ def book_session(data: SessionBooking, user=Depends(verify_user_token)):
     },
 )
 @limiter.limit("12/minute")
-def speakers_signup(user: UserSignup):
+def speakers_signup(request: Request, user: UserSignup):
     existing_user = (
         supabase.table("users")
         .select("*")
@@ -685,7 +687,7 @@ def speakers_signup(user: UserSignup):
     },
 )
 @limiter.limit("5/minute")
-def get_booked_slots(speaker_id: str, date: str):
+def get_booked_slots(request: Request, speaker_id: str, date: str):
     try:
         speaker_profile = (
             supabase.table("speaker_profiles")
@@ -740,7 +742,7 @@ def get_booked_slots(speaker_id: str, date: str):
     },
 )
 @limiter.limit("5/minute")
-def get_all_speakers():
+def get_all_speakers(request: Request):
     result = (
         supabase.table("speaker_profiles")
         .select("user_id, expertise, price_per_session")
@@ -777,7 +779,7 @@ def get_all_speakers():
     },
 )
 def create_speaker_profile(
-    profile: SpeakerProfile, user_id: str = Depends(verify_speaker_token)
+    request: Request, profile: SpeakerProfile, user_id: str = Depends(verify_speaker_token)
 ):
     existing = (
         supabase.table("speaker_profiles")
