@@ -331,8 +331,9 @@ def create_session_token(user_id: str) -> str:
     return jwt.encode(payload, JWT_SECRET, algorithm="HS256")
 
 
-@app.get(
+@app.api_route(
     "/",
+    methods=["GET", "HEAD"],
     tags=["General"],
     summary="Welcome",
     description="Welcome endpoint providing basic information about the API and links to documentation.",
